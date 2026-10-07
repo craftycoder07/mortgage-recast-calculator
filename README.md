@@ -5,14 +5,14 @@
 A static, dependency-free calculator that compares three scenarios side by side:
 
 - **No extra payments**
-- **Lump sums + recast**: the monthly payment is recalculated after each lump sum you mark "Recast". The loan still ends on its original date.
-- **Lump sums, no recast**: the same lump sums are paid, but the payment stays the same, so the loan is paid off sooner.
+- **Recast**: the monthly payment is recalculated automatically after every lump sum. The loan still ends on its original date.
+- **Lump Sums**: the same lump sums are paid, but the payment stays the same, so the loan is paid off sooner.
 
 Unlike most recast calculators, it supports:
 
 - **Multiple lump-sum payments**
 - **A date (month/year) for each payment**
-- **A recast toggle and recast fee for each payment**
+- **An optional recast fee, charged once per recast**
 
 It also shows a payment timeline, a balance chart, and an amortization schedule you can expand by year.
 

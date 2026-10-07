@@ -3,7 +3,7 @@
 
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  const STORAGE_KEY = 'recast-calc-v1';
+  const STORAGE_KEY = 'recast-calc-v2';
   const now = new Date();
   const TODAY_IDX = now.getFullYear() * 12 + now.getMonth();
 
@@ -37,17 +37,16 @@
       if (!(l.amount > 0)) return;
       const idx = toIdx(l.year, l.month);
       if (idx < loan.start || idx >= end) return;
-      const cur = byIdx.get(idx) || { idx, amount: 0, recast: false, fee: 0, rows: [] };
+      const cur = byIdx.get(idx) || { idx, amount: 0, rows: [] };
       cur.amount += l.amount;
-      if (l.recast) { cur.recast = true; cur.fee += l.fee || 0; }
       cur.rows.push(i);
       byIdx.set(idx, cur);
     });
     return byIdx;
   }
 
-  // mode: 'none' | 'recast' | 'noRecast'
-  function simulate(loan, lumpMap, mode) {
+  // mode: 'none' | 'recast' | 'noRecast'. In 'recast' mode every lump sum triggers a recast costing `fee`.
+  function simulate(loan, lumpMap, mode, fee = 0) {
     const r = loan.rate / 100 / 12;
     const n = loan.n;
     let bal = loan.principal;
@@ -66,12 +65,12 @@
       if (bal < 0.005) bal = 0;
       totalLump += applied;
       const ev = { idx, requested: l.amount, applied, capped: applied < l.amount - 0.005, before: pmt, after: pmt, recast: false, fee: 0, balance: bal };
-      if (mode === 'recast' && l.recast && bal > 0 && k < n) {
+      if (mode === 'recast' && bal > 0 && k < n) {
         pmt = payment(bal, r, n - k);
         ev.after = pmt;
         ev.recast = true;
-        ev.fee = l.fee;
-        totalFees += l.fee;
+        ev.fee = fee;
+        totalFees += fee;
       }
       events.push(ev);
       return applied;
@@ -119,7 +118,8 @@
     years: 30,
     startMonth: 0,
     startYear: now.getFullYear() - 2,
-    lumps: [{ amount: 25000, month: now.getMonth(), year: now.getFullYear(), recast: true, fee: 250 }],
+    recastFee: 0,
+    lumps: [{ amount: 25000, month: now.getMonth(), year: now.getFullYear() }],
     scheduleMode: 'recast',
   });
 
@@ -128,7 +128,11 @@
   function load() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return Object.assign(defaults(), JSON.parse(raw));
+      if (raw) {
+        const saved = Object.assign(defaults(), JSON.parse(raw));
+        saved.lumps = (saved.lumps || []).map(({ amount, month, year }) => ({ amount, month, year }));
+        return saved;
+      }
     } catch (e) { /* storage unavailable */ }
     return defaults();
   }
@@ -147,7 +151,7 @@
 
   const $ = id => document.getElementById(id);
   const el = {
-    principal: $('principal'), rate: $('rate'), years: $('years'),
+    principal: $('principal'), rate: $('rate'), years: $('years'), recastFee: $('recastFee'),
     startMonth: $('startMonth'), startYear: $('startYear'),
     currentBalance: $('currentBalance'),
     lumps: $('lumps'), lumpEmpty: $('lumpEmpty'), addLump: $('addLump'), tpl: $('lumpTpl'),
@@ -171,11 +175,12 @@
     el.principal.value = state.principal;
     el.rate.value = state.rate;
     el.years.value = state.years;
+    el.recastFee.value = state.recastFee;
     el.startMonth.value = state.startMonth;
     el.startYear.value = state.startYear;
     el.scheduleMode.value = state.scheduleMode;
 
-    [['principal', 'principal'], ['rate', 'rate'], ['years', 'years'], ['startMonth', 'startMonth'], ['startYear', 'startYear']]
+    [['principal', 'principal'], ['rate', 'rate'], ['years', 'years'], ['startMonth', 'startMonth'], ['startYear', 'startYear'], ['recastFee', 'recastFee']]
       .forEach(([id, key]) => el[id].addEventListener('input', () => {
         state[key] = el[id].value === '' ? '' : +el[id].value;
         if (key === 'years' || key === 'startYear') refreshLumpYears();
@@ -188,7 +193,7 @@
       // Default the new payment to a year after the last one, or this month.
       const base = prev ? toIdx(prev.year, prev.month) + 12 : Math.max(TODAY_IDX, loan.start);
       const idx = Math.min(base, loan.start + loan.n - 1);
-      state.lumps.push({ amount: 10000, month: idx % 12, year: Math.floor(idx / 12), recast: false, fee: 250 });
+      state.lumps.push({ amount: 10000, month: idx % 12, year: Math.floor(idx / 12) });
       renderLumps();
       update();
       el.lumps.lastElementChild?.querySelector('[data-k="amount"]').focus();
@@ -221,19 +226,11 @@
       f('amount').value = l.amount;
       f('month').value = l.month;
       f('year').value = l.year;
-      f('recast').checked = !!l.recast;
-      f('fee').value = l.fee;
-      li.querySelector('.fee').classList.toggle('disabled', !l.recast);
-      f('fee').disabled = !l.recast;
 
       li.addEventListener('input', e => {
         const k = e.target.dataset.k;
         if (!k) return;
-        l[k] = k === 'recast' ? e.target.checked : (e.target.value === '' ? '' : +e.target.value);
-        if (k === 'recast') {
-          li.querySelector('.fee').classList.toggle('disabled', !l.recast);
-          f('fee').disabled = !l.recast;
-        }
+        l[k] = e.target.value === '' ? '' : +e.target.value;
         update();
       });
       li.querySelector('.remove').addEventListener('click', () => {
@@ -253,11 +250,12 @@
   function update() {
     save();
     const loan = loanFromState();
-    const lumps = state.lumps.map(l => ({ amount: +l.amount || 0, month: +l.month, year: +l.year, recast: !!l.recast, fee: +l.fee || 0 }));
+    const lumps = state.lumps.map(l => ({ amount: +l.amount || 0, month: +l.month, year: +l.year }));
     const lumpMap = prepareLumps(loan, lumps);
+    const fee = Math.max(0, +state.recastFee || 0);
     const sims = {
       none: simulate(loan, lumpMap, 'none'),
-      recast: simulate(loan, lumpMap, 'recast'),
+      recast: simulate(loan, lumpMap, 'recast', fee),
       noRecast: simulate(loan, lumpMap, 'noRecast'),
     };
     lastSims = { ...sims, loan };
@@ -283,7 +281,7 @@
       if (idx < loan.start) msg = 'This date is before the loan starts, so the payment is ignored.';
       else if (idx >= end) msg = 'This date is after the loan matures, so the payment is ignored.';
       else if (seen.has(idx)) msg = `This is the same month as payment #${seen.get(idx) + 1}. The two amounts are combined.`;
-      else if (idx > sims.noRecast.payoffIdx && l.amount > 0) msg = 'Without a recast, the loan is already paid off by this date.';
+      else if (idx > sims.noRecast.payoffIdx && l.amount > 0) msg = 'In the Lump Sums scenario, the loan is already paid off by this date.';
       if (!seen.has(idx)) seen.set(idx, i);
       warn.textContent = msg;
       warn.hidden = !msg;
@@ -291,7 +289,7 @@
     });
     for (const s of [sims.recast, sims.noRecast]) {
       for (const ev of s.events) {
-        if (ev.capped) notices.push(`${fmtIdx(ev.idx)}: the payment of ${usd.format(ev.requested)} is more than the remaining balance, so only ${usd2.format(ev.applied)} was applied (${s.mode === 'recast' ? 'recast' : 'no-recast'} scenario).`);
+        if (ev.capped) notices.push(`${fmtIdx(ev.idx)}: the payment of ${usd.format(ev.requested)} is more than the remaining balance, so only ${usd2.format(ev.applied)} was applied (${s.mode === 'recast' ? 'Recast' : 'Lump Sums'} scenario).`);
       }
     }
     return notices;
@@ -346,7 +344,7 @@
     el.timeline.innerHTML = sim.events.map(ev => {
       const change = ev.recast
         ? `payment ${usd2.format(ev.before)} → <strong>${usd2.format(ev.after)}</strong>${ev.fee ? ` <span class="muted">(fee ${usd.format(ev.fee)})</span>` : ''}`
-        : (ev.balance === 0 ? '<strong>loan paid off</strong>' : `<span class="muted">no recast, payment stays ${usd2.format(ev.before)}</span>`);
+        : '<strong>loan paid off</strong>';
       return `<li><span class="date">${fmtIdx(ev.idx)}</span><span>${usd.format(ev.applied)} paid</span><span>→ ${change}</span><span class="muted">balance ${usd.format(ev.balance)}</span></li>`;
     }).join('');
   }

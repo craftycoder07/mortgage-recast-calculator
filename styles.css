@@ -127,9 +127,6 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--wa
 }
 .lump .amt, .lump .when { grid-column: 1 / -1; }
 .lump .when .row2 { gap: 8px; }
-.lump .check { display: flex; align-items: center; gap: 6px; font-size: .9rem; align-self: center; margin-bottom: 12px; }
-.lump .check input { width: auto; }
-.lump .fee.disabled { opacity: .45; }
 .lump .remove {
   position: absolute; top: 4px; right: 4px;
   width: 28px; height: 28px;
