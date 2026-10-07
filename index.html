@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mortgage Recast Calculator</title>
+  <meta name="description" content="Compare a mortgage recast with extra principal payments. Supports multiple dated lump-sum payments and per-payment recasts.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <h1>Mortgage Recast Calculator</h1>
+      <p class="lede">Model one or many lump-sum payments, each on its own date, and choose which ones trigger a recast. Results update as you type.</p>
+    </div>
+  </header>
+
+  <main class="wrap layout">
+    <section class="inputs" aria-label="Inputs">
+      <div class="card">
+        <h2>Loan details</h2>
+        <label class="field">
+          <span>Original loan amount</span>
+          <div class="affix"><span>$</span><input id="principal" type="number" min="0" step="1000" inputmode="decimal"></div>
+        </label>
+        <div class="row2">
+          <label class="field">
+            <span>Annual interest rate</span>
+            <div class="affix suffix"><input id="rate" type="number" min="0" max="30" step="0.125" inputmode="decimal"><span>%</span></div>
+          </label>
+          <label class="field">
+            <span>Loan term (years)</span>
+            <input id="years" type="number" min="1" max="50" step="1" inputmode="numeric">
+          </label>
+        </div>
+        <div class="field">
+          <span>Loan start date</span>
+          <div class="row2">
+            <select id="startMonth" aria-label="Start month"></select>
+            <select id="startYear" aria-label="Start year"></select>
+          </div>
+          <small class="hint">First payment is due the month after the start date.</small>
+        </div>
+        <p class="stat" id="currentBalance"></p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Lump-sum payments</h2>
+          <button type="button" id="addLump" class="btn">+ Add payment</button>
+        </div>
+        <p class="hint">Each payment is applied to principal after that month's regular payment. Tick “Recast” to recalculate the monthly payment after it.</p>
+        <ol id="lumps" class="lumps"></ol>
+        <p id="lumpEmpty" class="hint" hidden>No lump-sum payments yet.</p>
+      </div>
+    </section>
+
+    <section class="results" aria-label="Results" aria-live="polite">
+      <div class="card">
+        <h2>Side-by-side comparison</h2>
+        <div class="table-scroll">
+          <table class="compare">
+            <thead>
+              <tr><th></th><th>No extra payments</th><th>Lump sums + recast</th><th>Lump sums, no recast</th></tr>
+            </thead>
+            <tbody id="compareBody"></tbody>
+          </table>
+        </div>
+        <ul id="notices" class="notices"></ul>
+      </div>
+
+      <div class="card">
+        <h2>Payment timeline (recast scenario)</h2>
+        <ul id="timeline" class="timeline"></ul>
+      </div>
+
+      <div class="card">
+        <h2>Remaining balance</h2>
+        <div id="chart" class="chart"></div>
+        <div class="legend">
+          <span><i class="sw s-none"></i>No extra</span>
+          <span><i class="sw s-recast"></i>Recast</span>
+          <span><i class="sw s-norecast"></i>No recast</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Amortization schedule</h2>
+          <select id="scheduleMode" aria-label="Scenario">
+            <option value="recast">Lump sums + recast</option>
+            <option value="noRecast">Lump sums, no recast</option>
+            <option value="none">No extra payments</option>
+          </select>
+        </div>
+        <div id="schedule" class="schedule"></div>
+      </div>
+    </section>
+
+    <section class="wrap-full card explainer">
+      <h2>How to read the results</h2>
+      <p><strong>Recast:</strong> once you pay a lump sum toward principal, the lender recalculates your monthly payment from the new balance over the time left on the loan. Your rate and end date stay the same, but each month you pay less.</p>
+      <p><strong>No recast:</strong> you pay the same lump sums and keep making your original payment. That clears the loan sooner and saves the most interest, but your monthly payment doesn't drop.</p>
+      <p>When you have several lump sums, you might recast only once, after the last one. Servicers usually charge a fee for each recast. Many also set a minimum lump sum, often around $5,000 or more. Check the rules with your servicer.</p>
+      <p class="disclaimer">These figures are estimates for educational purposes only. They are not financial advice. Your actual loan terms, rounding, and servicer rules may produce different numbers.</p>
+    </section>
+  </main>
+
+  <template id="lumpTpl">
+    <li class="lump">
+      <label class="field amt">
+        <span>Amount</span>
+        <div class="affix"><span>$</span><input data-k="amount" type="number" min="0" step="1000" inputmode="decimal"></div>
+      </label>
+      <div class="field when">
+        <span>Paid in</span>
+        <div class="row2">
+          <select data-k="month" aria-label="Payment month"></select>
+          <select data-k="year" aria-label="Payment year"></select>
+        </div>
+      </div>
+      <label class="check"><input data-k="recast" type="checkbox"> Recast</label>
+      <label class="field fee">
+        <span>Recast fee</span>
+        <div class="affix"><span>$</span><input data-k="fee" type="number" min="0" step="50" inputmode="decimal"></div>
+      </label>
+      <button type="button" class="remove" aria-label="Remove payment">×</button>
+      <p class="lump-warn" hidden></p>
+    </li>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
